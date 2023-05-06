@@ -69,8 +69,8 @@ class Timeframes:
             return dic[timeframe]
         except KeyError:
             raise Exception(
-                'Timeframe "{}" is invalid. Supported timeframes are 1m, 3m, 5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 1D'.format(
-                    timeframe))
+                f'Timeframe "{timeframe}" is invalid. Supported timeframes are 1m, 3m, 5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 1D'
+            )
 
     @staticmethod
     def to_timeframe(minutes):
@@ -95,8 +95,8 @@ class Timeframes:
             return dic[minutes]
         except KeyError:
             raise Exception(
-                'Minute "{}" is invalid. Supported timeframes are 1m, 3m, 5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 1D'.format(
-                    minutes))
+                f'Minute "{minutes}" is invalid. Supported timeframes are 1m, 3m, 5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 1D'
+            )
 
     @staticmethod
     def timeframe_to_resolution(timeframe):

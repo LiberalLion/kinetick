@@ -67,11 +67,7 @@ class Webull:
         self.username = ""
         self.password = ""
         self.paper = paper
-        if not paper:
-            self.wb = wb()
-        else:
-            self.wb = paper_webull()
-
+        self.wb = paper_webull() if paper else wb()
         self.connected = False
         self.started = False
 
@@ -189,28 +185,27 @@ class Webull:
         logmsg = copy.copy(msg)
         if hasattr(logmsg, "contract"):
             logmsg.contract = self.contractString(logmsg.contract)
-        self.log.info("[" + str(title).upper() + "]: %s", str(logmsg))
+        self.log.info(f"[{str(title).upper()}]: %s", str(logmsg))
 
     # -----------------------------------------
     def connect(self, username='test@test.com', password='pa$$w0rd', stream=False):
         """ login to webull """
         # connect
-        if not self.connected:
-            self.log.info("[CONNECTING TO WEBULL]")
-            if not self.paper:
-                self.wb.login(username, password)
-            if stream:
-                self.streamConnect()
-
-            self.connected = True
-            self._disconnected_by_user = False
-            self.username = username
-            self.password = password
-            self.log.info("[connected to webull]")
-            # time.sleep(1)
-            self.callbacks(caller="handleConnectionOpened", msg="<connectionOpened>")
-        else:
+        if self.connected:
             raise Exception("Already connected! Please disconnect to connect again.")
+        self.log.info("[CONNECTING TO WEBULL]")
+        if not self.paper:
+            self.wb.login(username, password)
+        if stream:
+            self.streamConnect()
+
+        self.connected = True
+        self._disconnected_by_user = False
+        self.username = username
+        self.password = password
+        self.log.info("[connected to webull]")
+        # time.sleep(1)
+        self.callbacks(caller="handleConnectionOpened", msg="<connectionOpened>")
 
     # -----------------------------------------
     def disconnect(self):
@@ -277,7 +272,7 @@ class Webull:
     # -----------------------------------------
     def handleErrorEvents(self, msg):
         """ logs error messages """
-        self.log.error("[#%s] %s" % (msg['errorCode'], msg['errorMsg']))
+        self.log.error(f"[#{msg['errorCode']}] {msg['errorMsg']}")
         self.callbacks(caller="handleError", msg=msg)
 
     # -----------------------------------------
@@ -317,7 +312,7 @@ class Webull:
     # Start admin handlers
     # -----------------------------------------
     def handleConnectionState(self, msg):
-        self.connected = not (msg.typeName == "error")
+        self.connected = msg.typeName != "error"
 
         if self.connected:
             self.connection_tracking["errors"] = []
@@ -439,7 +434,7 @@ class Webull:
             msg.value = float(msg.value)
         except Exception:
             msg.value = msg.value
-            if msg.value in ['true', 'false']:
+            if msg.value in {'true', 'false'}:
                 msg.value = (msg.value == 'true')
 
         try:
@@ -459,7 +454,7 @@ class Webull:
             pass
 
     def _get_active_account(self, account):
-        account = None if account == "" else None
+        account = None
         if account is None:
             if self.default_account is not None:
                 return self.default_account
@@ -497,7 +492,7 @@ class Webull:
         if account in self._accounts:
             return self._accounts[account]
 
-        raise ValueError("Account %s not found in account list" % account)
+        raise ValueError(f"Account {account} not found in account list")
 
     # -----------------------------------------
     # Position handling
@@ -548,7 +543,7 @@ class Webull:
         if account in self._positions:
             return self._positions[account]
 
-        raise ValueError("Account %s not found in account list" % account)
+        raise ValueError(f"Account {account} not found in account list")
 
     # -----------------------------------------
     # Portfolio handling
@@ -607,7 +602,7 @@ class Webull:
         if account in self._portfolios:
             return self._portfolios[account]
 
-        raise ValueError("Account %s not found in account list" % account)
+        raise ValueError(f"Account {account} not found in account list")
 
     # -----------------------------------------
     # Order handling
@@ -707,7 +702,7 @@ class Webull:
             if self.csv_path is not None:
                 for sym in self.historicalData:
                     contractString = str(sym)
-                    self.log.info("[HISTORICAL DATA FOR %s DOWNLOADED]" % contractString)
+                    self.log.info(f"[HISTORICAL DATA FOR {contractString} DOWNLOADED]")
                     self.historicalData[contractString].to_csv(
                         self.csv_path + contractString + '.csv'
                     )
@@ -782,19 +777,13 @@ class Webull:
         elif 'close' in data:
             # last price
             df2use[tickerId]['last'] = float(data['close'])
-            if 'volume' in data:
-                df2use[tickerId]['lastsize'] = int(data['volume'])
-            else:
-                df2use[tickerId]['lastsize'] = 1
-
+            df2use[tickerId]['lastsize'] = int(data['volume']) if 'volume' in data else 1
         if 'tradeTime' in data:
             ts = dateutil.parser.parse(data['tradeTime']) \
-                .strftime(COMMON_TYPES["DATE_TIME_FORMAT_LONG_MILLISECS"])
-            df2use[tickerId].index = [ts]
+                    .strftime(COMMON_TYPES["DATE_TIME_FORMAT_LONG_MILLISECS"])
         else:
             ts = datetime.utcnow().strftime(COMMON_TYPES["DATE_TIME_FORMAT_LONG_MILLISECS"])
-            df2use[tickerId].index = [ts]
-
+        df2use[tickerId].index = [ts]
         # fire callback
         self.callbacks(caller="handleTickPrice", msg=msg, tickerId=tickerId)
 
@@ -964,13 +953,19 @@ class Webull:
             col_prepend = "last_"
 
         # save side
-        self.optionsData[msg._tickerId][col_prepend + 'imp_vol'] = valid_val(msg.impliedVol)
-        self.optionsData[msg._tickerId][col_prepend + 'dividend'] = valid_val(msg.pvDividend)
-        self.optionsData[msg._tickerId][col_prepend + 'delta'] = valid_val(msg.delta)
-        self.optionsData[msg._tickerId][col_prepend + 'gamma'] = valid_val(msg.gamma)
-        self.optionsData[msg._tickerId][col_prepend + 'vega'] = valid_val(msg.vega)
-        self.optionsData[msg._tickerId][col_prepend + 'theta'] = valid_val(msg.theta)
-        self.optionsData[msg._tickerId][col_prepend + 'price'] = valid_val(msg.optPrice)
+        self.optionsData[msg._tickerId][f'{col_prepend}imp_vol'] = valid_val(
+            msg.impliedVol
+        )
+        self.optionsData[msg._tickerId][f'{col_prepend}dividend'] = valid_val(
+            msg.pvDividend
+        )
+        self.optionsData[msg._tickerId][f'{col_prepend}delta'] = valid_val(msg.delta)
+        self.optionsData[msg._tickerId][f'{col_prepend}gamma'] = valid_val(msg.gamma)
+        self.optionsData[msg._tickerId][f'{col_prepend}vega'] = valid_val(msg.vega)
+        self.optionsData[msg._tickerId][f'{col_prepend}theta'] = valid_val(msg.theta)
+        self.optionsData[msg._tickerId][f'{col_prepend}price'] = valid_val(
+            msg.optPrice
+        )
 
         # save generic/mid
         data = self.optionsData[msg._tickerId]
@@ -1114,13 +1109,13 @@ class Webull:
     def contractDetails(self, contract_identifier):
         """ returns string from contract tuple """
 
-        if isinstance(contract_identifier, Contract):
-            tickerId = self.tickerId(contract_identifier)
+        if (
+            not isinstance(contract_identifier, Contract)
+            and str(contract_identifier).isdigit()
+        ):
+            tickerId = contract_identifier
         else:
-            if str(contract_identifier).isdigit():
-                tickerId = contract_identifier
-            else:
-                tickerId = self.tickerId(contract_identifier)
+            tickerId = self.tickerId(contract_identifier)
 
         if tickerId in self.contract_details:
             return self.contract_details[tickerId]
@@ -1151,15 +1146,14 @@ class Webull:
             return True
 
         if contract.sec_type in ["OPT", "FOP"] and \
-                (contract.expiry == "" or contract.strike == "" or contract.right == ""):
+                    (contract.expiry == "" or contract.strike == "" or contract.right == ""):
             return True
 
         tickerId = self.tickerId(contract)
-        if tickerId in self.contract_details and \
-                len(self.contract_details[tickerId]["contracts"]) > 1:
-            return True
-
-        return False
+        return (
+            tickerId in self.contract_details
+            and len(self.contract_details[tickerId]["contracts"]) > 1
+        )
 
     # -----------------------------------------
     def createContract(self, contractTuple, **kwargs):
@@ -1167,7 +1161,7 @@ class Webull:
 
         contractString = self.contractString(contractTuple)
 
-        self.log.info("getting contract details for sym {}".format(contractString))
+        self.log.info(f"getting contract details for sym {contractString}")
         # get (or set if not set) the tickerId for this symbol
         # tickerId = self.tickerId(contractTuple[0])
         tickerId = self.tickerId(contractString)
@@ -1213,8 +1207,7 @@ class Webull:
     # -----------------------------------------
     def createStockContract(self, symbol, currency="INR", exchange="NSE"):
         contract_tuple = (symbol, "STK", exchange, currency, "", 0.0, "")
-        contract = self.createContract(contract_tuple)
-        return contract
+        return self.createContract(contract_tuple)
 
     # -----------------------------------------
     def createFuturesContract(self, symbol, currency="INR", expiry=None,
@@ -1222,7 +1215,7 @@ class Webull:
         if symbol[0] == "@":
             return self.createContinuousFuturesContract(symbol[1:], exchange)
 
-        expiry = [expiry] if not isinstance(expiry, list) else expiry
+        expiry = expiry if isinstance(expiry, list) else [expiry]
 
         contracts = []
         for fut_expiry in expiry:
@@ -1241,7 +1234,7 @@ class Webull:
             symbol, "CONTFUT", exchange, '', '', '', ''))
 
         # wait max 250ms for contract details
-        for x in range(25):
+        for _ in range(25):
             time.sleep(0.01)
             contfut = self.contractDetails(contfut_contract)
             if contfut["tickerId"] != 0 and contfut["m_summary"]["m_conId"] != 0:
@@ -1256,19 +1249,19 @@ class Webull:
             if not is_retry:
                 return self.createContinuousFuturesContract(
                     symbol, exchange, output, True)
-            raise ValueError("Can't find a valid Contract using this "
-                             "combination (%s/%s)" % (symbol, exchange))
+            raise ValueError(
+                f"Can't find a valid Contract using this combination ({symbol}/{exchange})"
+            )
 
         # delete continuous placeholder
         tickerId = contfut["tickerId"]
         del self.contracts[tickerId]
         del self.contract_details[tickerId]
 
-        # create futures contract
-        expiry = contfut["m_contractMonth"]
         currency = contfut["m_summary"]["m_currency"]
         multiplier = int(contfut["m_summary"]["m_multiplier"])
 
+        expiry = contfut["m_contractMonth"]
         if output == "tuple":
             return (symbol, "FUT", exchange, currency,
                     expiry, 0.0, "", multiplier)
@@ -1281,9 +1274,9 @@ class Webull:
                              currency="INR", secType="OPT", exchange="NSE"):
 
         # secType = OPT (Option) / FOP (Options on Futures)
-        expiry = [expiry] if not isinstance(expiry, list) else expiry
-        strike = [strike] if not isinstance(strike, list) else strike
-        otype = [otype] if not isinstance(otype, list) else otype
+        expiry = expiry if isinstance(expiry, list) else [expiry]
+        strike = strike if isinstance(strike, list) else [strike]
+        otype = otype if isinstance(otype, list) else [otype]
 
         contracts = []
         for opt_expiry in expiry:
@@ -1302,15 +1295,13 @@ class Webull:
         createCashContract("EUR", currency="USD")
         """
         contract_tuple = (symbol, "CASH", exchange, currency, "", 0.0, "")
-        contract = self.createContract(contract_tuple)
-        return contract
+        return self.createContract(contract_tuple)
 
     # -----------------------------------------
     def createIndexContract(self, symbol, currency="INR", exchange="NSE"):
         """ Used for indexes (SPX, DJX, ...) """
         contract_tuple = (symbol, "IND", exchange, currency, "", 0.0, "")
-        contract = self.createContract(contract_tuple)
-        return contract
+        return self.createContract(contract_tuple)
 
     # -----------------------------------------
     # order constructors
@@ -1410,7 +1401,7 @@ class Webull:
         """
         Cancel streaming market data for contract
         """
-        if contracts == None:
+        if contracts is None:
             contracts = list(self.contracts.values())
         elif not isinstance(contracts, list):
             contracts = [contracts]
@@ -1423,7 +1414,7 @@ class Webull:
 
     @asynctools.multitasking.task
     def requestMarketQuote(self, contracts=None):
-        if contracts == None:
+        if contracts is None:
             contracts = list(self.contracts.values())
         elif not isinstance(contracts, list):
             contracts = [contracts]
@@ -1451,7 +1442,7 @@ class Webull:
             # df2use[tickerId]['last'] = float(quote['close'])
 
             ts = dateutil.parser.parse(quote['tradeTime']) \
-                .strftime(COMMON_TYPES["DATE_TIME_FORMAT_LONG_MILLISECS"])
+                    .strftime(COMMON_TYPES["DATE_TIME_FORMAT_LONG_MILLISECS"])
             df2use[tickerId].index = [ts]
 
             df2use[tickerId]['high'] = float(quote['high'])
@@ -1540,7 +1531,7 @@ class Webull:
         """
         Cancel streaming market data for contract
         """
-        if contracts == None:
+        if contracts is None:
             contracts = list(self.contracts.values())
 
         elif not isinstance(contracts, list):
@@ -1554,14 +1545,13 @@ class Webull:
 
     # -----------------------------------------
     def get_bars(self, tickerId, timestamp=None, lookback=1, interval='m1'):
-        bars = self.wb.get_bars(
+        return self.wb.get_bars(
             tId=tickerId,
             timeStamp=timestamp,
             count=lookback,
             interval=interval,
-            extendTrading=0
+            extendTrading=0,
         )
-        return bars
 
     # -----------------------------------------
     def requestHistoricalData(self, contracts=None, resolution="15",
@@ -1596,8 +1586,8 @@ class Webull:
                     tId=tickerId,
                     timeStamp=timestamp,
                     count=lookback,
-                    interval='m' + str(resolution),
-                    extendTrading=int(rth)
+                    interval=f'm{str(resolution)}',
+                    extendTrading=int(rth),
                 )
 
                 lookback = lookback - len(ohlc.index)
@@ -1611,7 +1601,7 @@ class Webull:
 
     def cancelHistoricalData(self, contracts=None):
         """ cancel historical data stream """
-        if contracts == None:
+        if contracts is None:
             contracts = list(self.contracts.values())
         elif not isinstance(contracts, list):
             contracts = [contracts]
@@ -1679,22 +1669,17 @@ class Webull:
         """ Used for ComboLegs. Expecting list of legs """
         exchange = legs[0].m_exchange if exchange is None else exchange
         contract_tuple = (symbol, "BAG", exchange, currency, "", 0.0, "")
-        contract = self.createContract(contract_tuple, comboLegs=legs)
-        return contract
+        return self.createContract(contract_tuple, comboLegs=legs)
 
     # -----------------------------------------
     def getStrikes(self, contract_identifier, smin=None, smax=None):
         """ return strikes of contract / "multi" contract's contracts """
-        strikes = []
         contracts = self.contractDetails(contract_identifier)["contracts"]
 
         if contracts[0].sec_type not in ("FOP", "OPT"):
             return []
 
-        # collect expirations
-        for contract in contracts:
-            strikes.append(contract.strike)
-
+        strikes = [contract.strike for contract in contracts]
         # convert to floats
         strikes = list(map(float, strikes))
         # strikes = list(set(strikes))
@@ -1703,8 +1688,7 @@ class Webull:
         if smin is not None or smax is not None:
             smin = smin if smin is not None else 0
             smax = smax if smax is not None else 1000000000
-            srange = list(set(range(smin, smax, 1)))
-            strikes = [n for n in strikes if n in srange]
+            strikes = [n for n in strikes if n in list(set(range(smin, smax, 1)))]
 
         strikes.sort()
         return tuple(strikes)
@@ -1712,16 +1696,12 @@ class Webull:
     # -----------------------------------------
     def getExpirations(self, contract_identifier, expired=0):
         """ return expiration of contract / "multi" contract's contracts """
-        expirations = []
         contracts = self.contractDetails(contract_identifier)["contracts"]
 
         if contracts[0].sec_type not in ("FUT", "FOP", "OPT"):
             return []
 
-        # collect expirations
-        for contract in contracts:
-            expirations.append(contract.expiry)
-
+        expirations = [contract.expiry for contract in contracts]
         # convert to ints
         expirations = list(map(int, expirations))
         # expirations = list(set(expirations))

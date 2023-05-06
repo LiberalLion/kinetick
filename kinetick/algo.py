@@ -125,11 +125,12 @@ class Algo(Broker):
         utils.create_logger(self.name, level=logging.INFO)
         self.log = logging.getLogger(self.name)
 
-        # override args with any (non-default) command-line args
-        self.args = {arg: val for arg, val in locals().items(
-        ) if arg not in ('__class__', 'self', 'kwargs')}
-        self.args.update(kwargs)
-        self.args.update(self.load_cli_args())
+        self.args = {
+            arg: val
+            for arg, val in locals().items()
+            if arg not in ('__class__', 'self', 'kwargs')
+        } | kwargs
+        self.args |= self.load_cli_args()
 
         # -----------------------------------
         # assign algo params
@@ -307,8 +308,7 @@ class Algo(Broker):
                             help='Preload positions. Only available in live trade. ex. 4D, 1H', required=False)
 
         cmd_args, _ = parser.parse_known_args()
-        args = {arg: val for arg, val in vars(
-            cmd_args).items()}
+        args = dict(vars(cmd_args))
         return args
 
     # ---------------------------------------
@@ -327,7 +327,7 @@ class Algo(Broker):
             kind = "TICK" if self.resolution[-1] in ("S", "K", "V") else "BAR"
             dfs = []
             for symbol in self.symbols:
-                file = "%s/%s.%s.csv" % (self.backtest_csv, symbol, kind)
+                file = f"{self.backtest_csv}/{symbol}.{kind}.csv"
                 if not os.path.exists(file):
                     self.log_algo.error(
                         "Can't load data for %s (%s doesn't exist)",
@@ -613,7 +613,7 @@ class Algo(Broker):
         """
         self.log_algo.info('ORDER: %s %4d %s %s', txn_type,
                            quantity, symbol, kwargs)
-        if txn_type.upper() == "EXIT" or txn_type.upper() == "FLATTEN":
+        if txn_type.upper() in ["EXIT", "FLATTEN"]:
             position = self.get_positions(symbol)
             if position['position'] == 0:
                 return
@@ -637,8 +637,8 @@ class Algo(Broker):
                 return
 
             # buy/sell at best price
-            limit_price = kwargs['limit_price'] if 'limit_price' in kwargs else 0
-            best_price = kwargs['best_price'] if 'best_price' in kwargs else False
+            limit_price = kwargs.get('limit_price', 0)
+            best_price = kwargs.get('best_price', False)
 
             if best_price is True and limit_price > 0:
                 instrument = self.get_instrument(symbol)
@@ -650,9 +650,9 @@ class Algo(Broker):
 
                 if running_price > 0 and running_size >= abs(quantity):
                     if txn_type.upper() != "BUY":
-                        kwargs['limit_price'] = running_price if running_price > limit_price else limit_price
+                        kwargs['limit_price'] = max(running_price, limit_price)
                     else:
-                        kwargs['limit_price'] = running_price if running_price < limit_price else limit_price
+                        kwargs['limit_price'] = min(running_price, limit_price)
 
             kwargs['symbol'] = symbol
             kwargs['quantity'] = abs(quantity)
@@ -728,10 +728,10 @@ class Algo(Broker):
     # ---------------------------------------
     @staticmethod
     def _get_window_per_symbol(df, window):
-        # truncate tick window per symbol
-        dfs = []
-        for sym in list(df["symbol"].unique()):
-            dfs.append(df[df['symbol'] == sym][-window:])
+        dfs = [
+            df[df['symbol'] == sym][-window:]
+            for sym in list(df["symbol"].unique())
+        ]
         return pd.concat(dfs, sort=True).sort_index()
 
     # ---------------------------------------
@@ -774,16 +774,7 @@ class Algo(Broker):
         if self.record_ts is None:
             self.record_ts = tick.index[0]
 
-        if self.resolution[-1] not in ("S", "K", "V"):
-            if self.threads == 0:
-                self.ticks = self._update_window(
-                    self.ticks, tick, window=self.tick_window)
-            else:
-                self_ticks = self._update_window(
-                    self_ticks, tick, window=self.tick_window)
-                self.ticks = self._thread_safe_merge(
-                    symbol, self.ticks, self_ticks)  # assign back
-        else:
+        if self.resolution[-1] in ("S", "K", "V"):
             self.ticks = self._update_window(self.ticks, tick)
             # bars = utils.resample(self.ticks, self.resolution)
             bars = utils.resample(
@@ -809,12 +800,19 @@ class Algo(Broker):
             # record non time-based bars
             self.record(bars[-1:])
 
+        elif self.threads == 0:
+            self.ticks = self._update_window(
+                self.ticks, tick, window=self.tick_window)
+        else:
+            self_ticks = self._update_window(
+                self_ticks, tick, window=self.tick_window)
+            self.ticks = self._thread_safe_merge(
+                symbol, self.ticks, self_ticks)  # assign back
         if not stale_tick:
             if self.ticks[(self.ticks['symbol'] == symbol) | (
                     self.ticks['symbol_group'] == symbol)].empty:
                 return
-            tick_instrument = self.get_instrument(tick)
-            if tick_instrument:
+            if tick_instrument := self.get_instrument(tick):
                 self.on_tick(tick_instrument)
 
     # ---------------------------------------
@@ -845,16 +843,14 @@ class Algo(Broker):
             else:
                 self_bars = self._update_window(self_bars, bar,
                                                 window=self.bar_window)
+        elif self.threads == 0:
+            self.bars = self._update_window(self.bars, bar,
+                                            window=self.bar_window,
+                                            resolution=self.resolution)
         else:
-            # add the bar and resample to resolution
-            if self.threads == 0:
-                self.bars = self._update_window(self.bars, bar,
-                                                window=self.bar_window,
-                                                resolution=self.resolution)
-            else:
-                self_bars = self._update_window(self_bars, bar,
-                                                window=self.bar_window,
-                                                resolution=self.resolution)
+            self_bars = self._update_window(self_bars, bar,
+                                            window=self.bar_window,
+                                            resolution=self.resolution)
 
         # assign new data to self.bars if threaded
         if self.threads > 0:
@@ -880,8 +876,7 @@ class Algo(Broker):
             if self.bars[(self.bars['symbol'] == symbol) | (
                     self.bars['symbol_group'] == symbol)].empty:
                 return
-            bar_instrument = self.get_instrument(symbol)
-            if bar_instrument:
+            if bar_instrument := self.get_instrument(symbol):
                 self.record_ts = bar.index[0]
                 self.on_bar(bar_instrument)
                 # if self.resolution[-1] not in ("S", "K", "V"):
@@ -924,11 +919,7 @@ class Algo(Broker):
             df.drop('_idx_', axis=1, inplace=True)
 
         # return
-        if window is None:
-            return df
-
-        # return df[-window:]
-        return self._get_window_per_symbol(df, window)
+        return df if window is None else self._get_window_per_symbol(df, window)
 
     # ---------------------------------------
     # signal logging methods
@@ -968,7 +959,7 @@ class Algo(Broker):
         bars = self.broker.get_bars(
             tickerId=self.broker.tickerId(symbol),
             lookback=lookback,
-            interval='m' + str(Timeframes.timeframe_to_minutes(Timeframes.to_timeframe(self.resolution)))
+            interval=f'm{str(Timeframes.timeframe_to_minutes(Timeframes.to_timeframe(self.resolution)))}',
         )
         bars['symbol'] = symbol
         bars["symbol_group"] = utils.gen_symbol_group(symbol)

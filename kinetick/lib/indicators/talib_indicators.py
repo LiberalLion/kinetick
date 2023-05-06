@@ -55,11 +55,10 @@ def _extract_series(data):
 
     if isinstance(data, Series):
         values = data.values
-    else:
-        if "last" in data.columns:
-            values = data['last'].values
-        elif "close" in data.columns:
-            values = data['close'].values
+    elif "last" in data.columns:
+        values = data['last'].values
+    elif "close" in data.columns:
+        values = data['close'].values
 
     if values is None:
         raise ValueError(
@@ -72,11 +71,15 @@ def _extract_series(data):
 
 
 def _extract_ohlc(data):
-    if isinstance(data, DataFrame):
-        if "open" in data.columns and "high" in data.columns \
-                and "low" in data.columns and "close" in data.columns \
-                and "volume" in data.columns:
-            return data[['open', 'high', 'low', 'close', 'volume']].T.values
+    if (
+        isinstance(data, DataFrame)
+        and "open" in data.columns
+        and "high" in data.columns
+        and "low" in data.columns
+        and "close" in data.columns
+        and "volume" in data.columns
+    ):
+        return data[['open', 'high', 'low', 'close', 'volume']].T.values
 
     raise ValueError("data must be Pandas with OLHC columns")
 

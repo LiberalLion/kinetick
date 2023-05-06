@@ -74,8 +74,7 @@ class Position(DynamicDocument):
             sl_hit = True
 
         pnl = -pnl if sl_hit else pnl
-        pnl = pnl * self._quantity
-        return pnl
+        return pnl * self._quantity
 
     @property
     def active(self):

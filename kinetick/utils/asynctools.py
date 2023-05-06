@@ -174,7 +174,7 @@ class RecurringTask(Thread):
         self.start()
 
     def __repr__(self):
-        return 'RecurringTask({}, {}, {})'.format(self._func, self.interval_sec, self.init_sec)
+        return f'RecurringTask({self._func}, {self.interval_sec}, {self.init_sec})'
 
     def run(self):
         """Start the recurring task."""

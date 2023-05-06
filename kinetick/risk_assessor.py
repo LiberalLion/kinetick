@@ -49,15 +49,7 @@ class RiskAssessor(Borg):
         Bot().add_command_handler("resetrms", self.reset, "Reset RMS values")
 
     def availableMarginHandler(self, update, context):
-        msg = "```\n" \
-              "Available margin: {} \n" \
-              "Active Trades: {} \n" \
-              "Available capital: {} \n" \
-              "PNL: {} \n" \
-              "Win Trades: {} \n" \
-              "Loss Trades: {} \n" \
-              "```".format(self.available_margin, len(self.active_positions),
-                           self.capital, self.pnl, self.win_trades, self.loss_trades)
+        msg = f"```\nAvailable margin: {self.available_margin} \nActive Trades: {len(self.active_positions)} \nAvailable capital: {self.capital} \nPNL: {self.pnl} \nWin Trades: {self.win_trades} \nLoss Trades: {self.loss_trades} \n```"
         update.message.reply_text(msg, parse_mode="MarkdownV2")
 
     @staticmethod
@@ -119,10 +111,13 @@ class RiskAssessor(Borg):
         target = 5 * round((spread * self.risk2reward) / 5, 2)
         target = entry_price + target if direction == "LONG" else entry_price - target
 
-        position = Position(_quantity=quantity, entry_price=entry_price, target=target,
-                            stop=stop_loss, _direction=direction)
-
-        return position
+        return Position(
+            _quantity=quantity,
+            entry_price=entry_price,
+            target=target,
+            stop=stop_loss,
+            _direction=direction,
+        )
 
     # TODO make thread safe
     def enter_position(self, position):

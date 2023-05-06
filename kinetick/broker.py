@@ -103,8 +103,11 @@ class Broker():
 
         self.broker = Webull()
         self.broker.callbacks = self._callback
-        self.zerodha = Zerodha(zerodha_user, zerodha_password, zerodha_pin,
-                               debug=True) if not self.backtest else None
+        self.zerodha = (
+            None
+            if self.backtest
+            else Zerodha(zerodha_user, zerodha_password, zerodha_pin, debug=True)
+        )
         self.connect()
 
         self.log_broker.info("Connection established...")
@@ -388,8 +391,7 @@ class Broker():
                 days, remainder = divmod(delta, 86400)
                 hours, remainder = divmod(remainder, 3600)
                 minutes, seconds = divmod(remainder, 60)
-                duration = ('%sd %sh %sm %ss' %
-                            (days, hours, minutes, seconds))
+                duration = f'{days}d {hours}h {minutes}m {seconds}s'
                 self.active_trades[tradeId]['duration'] = duration.replace(
                     "0d ", "").replace("0h ", "").replace("0m ", "")
             except Exception as e:
@@ -435,15 +437,10 @@ class Broker():
         if trade['entry_time'] is None:
             return
 
-        # connection established
-        if self.db_connection is not None:
-            pass
-            # TODO save to db
-
         if self.trade_log_dir:
             self.trade_log_dir = (self.trade_log_dir + '/').replace('//', '/')
             trade_log_path = self.trade_log_dir + self.strategy.lower() + "_" + \
-                             datetime.now().strftime('%Y%m%d') + ".csv"
+                                 datetime.now().strftime('%Y%m%d') + ".csv"
 
             # convert None to empty string !!
             trade.update((k, '') for k, v in trade.items() if v is None)
@@ -461,10 +458,10 @@ class Broker():
                 trades.drop_duplicates(['entry_time', 'symbol', 'strategy'],
                                        keep="last", inplace=True)
                 trades.to_csv(trade_log_path, header=True, index=False)
-                utils.chmod(trade_log_path)
             else:
                 trade_df.to_csv(trade_log_path, header=True, index=False)
-                utils.chmod(trade_log_path)
+
+            utils.chmod(trade_log_path)
 
     # ---------------------------------------
     def active_order(self, symbol, order_type="STOP"):
@@ -513,9 +510,9 @@ class Broker():
             initial_stop = kwargs['stoploss']
 
         order_type = Zerodha.ORDER_TYPE_MARKET if limit_price == 0 else Zerodha.ORDER_TYPE_LIMIT
-        fillorkill = kwargs["fillorkill"] if "fillorkill" in kwargs else False
-        iceberg = kwargs["iceberg"] if "iceberg" in kwargs else False
-        tif = kwargs["tif"] if "tif" in kwargs else "DAY"
+        fillorkill = kwargs.get("fillorkill", False)
+        iceberg = kwargs.get("iceberg", False)
+        tif = kwargs.get("tif", "DAY")
 
         # clear expired pending orders
         # self._cancel_expired_pending_orders()
@@ -537,9 +534,9 @@ class Broker():
         # is bracket order
         bracket = (target > 0) | (initial_stop > 0) | (
                 trail_stop_at > 0) | (trail_stop_by > 0)
-        trigger_price = kwargs['trigger_price'] if 'trigger_price' in kwargs else initial_stop
+        trigger_price = kwargs.get('trigger_price', initial_stop)
         # create & submit order
-        sec_type = kwargs['sec_type'] if 'sec_type' in kwargs else SecurityType.STOCK
+        sec_type = kwargs.get('sec_type', SecurityType.STOCK)
         pos_type = pos_type or (PositionType.CO if bracket else None)
         variety, product = self.zerodha.get_order_variety(sec_type, pos_type)
 
@@ -599,11 +596,6 @@ class Broker():
         self.orders.recent[order_id] = self._get_locals(locals())
         self.orders.recent[order_id]['targetOrderId'] = 0
         self.orders.recent[order_id]['stopOrderId'] = 0
-
-        if bracket:
-            pass
-            # self.orders.recent[orderId]['targetOrderId'] = order["targetOrderId"]
-            # self.orders.recent[orderId]['stopOrderId'] = order["stopOrderId"]
 
         # append market price at the time of order
         try:
@@ -676,11 +668,12 @@ class Broker():
             if delta < 0:
                 self.zerodha.cancel_order(orderId)
                 if orderId in self.orders.pending_ttls:
-                    if orderId in self.orders.pending_ttls:
-                        del self.orders.pending_ttls[orderId]
-                    if symbol in self.orders.pending:
-                        if self.orders.pending[symbol]['orderId'] == orderId:
-                            del self.orders.pending[symbol]
+                    del self.orders.pending_ttls[orderId]
+                    if (
+                        symbol in self.orders.pending
+                        and self.orders.pending[symbol]['orderId'] == orderId
+                    ):
+                        del self.orders.pending[symbol]
 
     # ---------------------------------------------------------
     def _expire_pending_order(self, symbol, orderId):
@@ -689,9 +682,11 @@ class Broker():
         if orderId in self.orders.pending_ttls:
             del self.orders.pending_ttls[orderId]
 
-        if symbol in self.orders.pending:
-            if self.orders.pending[symbol]['orderId'] == orderId:
-                del self.orders.pending[symbol]
+        if (
+            symbol in self.orders.pending
+            and self.orders.pending[symbol]['orderId'] == orderId
+        ):
+            del self.orders.pending[symbol]
 
     # ---------------------------------------------------------
     def _update_pending_order(self, symbol, orderId, expiry, quantity):
@@ -742,12 +737,11 @@ class Broker():
         symbol = self.get_symbol(symbol)
         if symbol in self.instrument_obj:
             return self.instrument_obj[symbol]
-        else:
-            instrument = Instrument(symbol)
-            instrument._set_parent(self)
-            instrument._set_windows(ticks=self.tick_window, bars=self.bar_window)
-            self.instrument_obj[symbol] = instrument
-            return instrument
+        instrument = Instrument(symbol)
+        instrument._set_parent(self)
+        instrument._set_windows(ticks=self.tick_window, bars=self.bar_window)
+        self.instrument_obj[symbol] = instrument
+        return instrument
 
     # ---------------------------------------
     @staticmethod
@@ -781,10 +775,7 @@ class Broker():
         symbol = self.get_symbol(symbol)
 
         self.orders.by_symbol = self.broker.group_orders("symbol")
-        if symbol in self.orders.by_symbol:
-            return self.orders.by_symbol[symbol]
-
-        return {}
+        return self.orders.by_symbol[symbol] if symbol in self.orders.by_symbol else {}
 
     # ---------------------------------------
     def get_positions(self, symbol):
@@ -848,10 +839,7 @@ class Broker():
     def get_pending_orders(self, symbol=None):
         if symbol is not None:
             symbol = self.get_symbol(symbol)
-            if symbol in self.orders.pending:
-                return self.orders.pending[symbol]
-            return {}
-
+            return self.orders.pending[symbol] if symbol in self.orders.pending else {}
         return self.orders.pending
 
     # ---------------------------------------

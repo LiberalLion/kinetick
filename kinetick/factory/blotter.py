@@ -6,8 +6,7 @@ class MainBlotter(Blotter):
 
 
 def build():
-    blotter = MainBlotter()
-    return blotter
+    return MainBlotter()
 
 
 # ===========================================

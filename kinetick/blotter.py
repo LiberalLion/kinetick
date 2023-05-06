@@ -146,17 +146,18 @@ class Blotter():
         self.cash_ticks = cash_ticks  # outside cache
         self.rtvolume = set()  # has RTVOLUME?
 
-        # override args with any (non-default) command-line args
-        self.args = {arg: val for arg, val in locals().items(
-        ) if arg not in ('__class__', 'self', 'kwargs')}
-        self.args.update(kwargs)
-        self.args.update(self.load_cli_args())
+        self.args = {
+            arg: val
+            for arg, val in locals().items()
+            if arg not in ('__class__', 'self', 'kwargs')
+        } | kwargs
+        self.args |= self.load_cli_args()
 
         # -------------------------------
         # work default values
         # -------------------------------
         if zmqtopic is None:
-            zmqtopic = "_kinetick_" + str(self.name.lower()) + "_"
+            zmqtopic = f"_kinetick_{str(self.name.lower())}_"
             if self.args['zmqtopic'] is None:
                 self.args['zmqtopic'] = zmqtopic
 
@@ -168,8 +169,7 @@ class Blotter():
         # read cached args to detect duplicate blotters
         self.duplicate_run = False
         self.cached_args = {}
-        self.args_cache_file = "%s/%s.kinetick" % (
-            tempfile.gettempdir(), self.name)
+        self.args_cache_file = f"{tempfile.gettempdir()}/{self.name}.kinetick"
         if os.path.exists(self.args_cache_file):
             self.cached_args = self._read_cached_args()
 
@@ -266,10 +266,7 @@ class Blotter():
     # -------------------------------------------
     def load_cli_args(self):
         def to_boolean(s):
-            if s:
-                return s.lower() in ['true', '1', 't', 'y', 'yes']
-            else:
-                return None
+            return s.lower() in ['true', '1', 't', 'y', 'yes'] if s else None
 
         parser = argparse.ArgumentParser(
             description='Kinetick Blotter',
@@ -303,8 +300,7 @@ class Blotter():
         # only return non-default cmd line args
         # (meaning only those actually given)
         cmd_args, _ = parser.parse_known_args()
-        args = {arg: val for arg, val in vars(
-            cmd_args).items()}
+        args = dict(vars(cmd_args))
         return args
 
     # -------------------------------------------
@@ -321,13 +317,10 @@ class Blotter():
         elif caller == "handleHistoricalData":
             self.on_ohlc_received(msg, kwargs)
 
-        # elif caller == "handleTickString":
-        #     self.on_tick_string_received(msg['tickerId'], kwargs)
-
         elif caller == "handleMarketQuote":
             self.on_quote_received(kwargs['tickerId'])
 
-        elif caller == "handleTickPrice" or caller == "handleTickSize" or caller == "handleTickString":
+        elif caller in ["handleTickPrice", "handleTickSize", "handleTickString"]:
             tickerId = msg['tickerId']
             self.on_tick_string_received(tickerId, kwargs)
 
@@ -409,7 +402,7 @@ class Blotter():
 
         # for instruments that DOESN'T receive RTVOLUME events (exclude options)
         elif symbol not in self.rtvolume and \
-                self.connection.contracts[tickerId].sec_type not in ("OPT", "FOP"):
+                    self.connection.contracts[tickerId].sec_type not in ("OPT", "FOP"):
 
             tick = self.connection.marketData[tickerId]
             # print(tick)
@@ -436,9 +429,11 @@ class Blotter():
         # proceed if data exists
         if data is not None:
             # cache last tick
-            if symbol in self.cash_ticks.keys():
-                if data == self.cash_ticks[symbol]:
-                    return
+            if (
+                symbol in self.cash_ticks.keys()
+                and data == self.cash_ticks[symbol]
+            ):
+                return
 
             self.cash_ticks[symbol] = data
 
@@ -789,21 +784,20 @@ class Blotter():
                     if first_run:
                         first_run = False
 
-                    else:
-                        if contracts != prev_contracts:
-                            # cancel market data for removed contracts
-                            for contract in prev_contracts:
-                                if contract not in contracts:
-                                    self.connection.cancelMarketDataSubscription(
+                    elif contracts != prev_contracts:
+                        # cancel market data for removed contracts
+                        for contract in prev_contracts:
+                            if contract not in contracts:
+                                self.connection.cancelMarketDataSubscription(
+                                    self.connection.createContract(contract))
+                                if self.args['orderbook']:
+                                    self.connection.cancelMarketDepth(
                                         self.connection.createContract(contract))
-                                    if self.args['orderbook']:
-                                        self.connection.cancelMarketDepth(
-                                            self.connection.createContract(contract))
-                                    time.sleep(0.1)
-                                    contract_string = self.connection.contractString(
-                                        contract).split('_')[0]
-                                    self.log_blotter.info(
-                                        'Contract Removed [%s]', contract_string)
+                                time.sleep(0.1)
+                                contract_string = self.connection.contractString(
+                                    contract).split('_')[0]
+                                self.log_blotter.info(
+                                    'Contract Removed [%s]', contract_string)
 
                     # request market data
                     for contract in contracts:
@@ -820,9 +814,8 @@ class Blotter():
                                 'Contract Added [%s]', contract_string)
 
                     # update latest contracts
-                    if prev_contracts != contracts:
-                        if not self.connection.started:
-                            self.connection.stream()
+                    if prev_contracts != contracts and not self.connection.started:
+                        self.connection.stream()
 
                     prev_contracts = contracts
                 time.sleep(10)
@@ -885,11 +878,7 @@ class Blotter():
         # combine all lists
         data = pd.concat(dfs, sort=True)
 
-        # flatten bad ids
-        bad_ids = sum(bad_ids, [])
-
-        # remove bad ids from db
-        if bad_ids:
+        if bad_ids := sum(bad_ids, []):
             bad_ids = list(map(str, map(int, bad_ids)))
             self.log_blotter.warning("Bad Ids found", bad_ids)
 
@@ -993,21 +982,19 @@ class Blotter():
                                 for k, v in data.items() if v is None)
 
                     # quote
-                    if data['kind'] == "ORDERBOOK":
-                        if book_handler is not None:
-                            try:
-                                book_handler(data)
-                            except Exception as e:
-                                self.log_blotter.error(e)
-                            continue
+                    if data['kind'] == "ORDERBOOK" and book_handler is not None:
+                        try:
+                            book_handler(data)
+                        except Exception as e:
+                            self.log_blotter.error(e)
+                        continue
                     # quote
-                    if data['kind'] == "QUOTE":
-                        if quote_handler is not None:
-                            try:
-                                quote_handler(data)
-                            except Exception as e:
-                                self.log_blotter.error(e)
-                            continue
+                    if data['kind'] == "QUOTE" and quote_handler is not None:
+                        try:
+                            quote_handler(data)
+                        except Exception as e:
+                            self.log_blotter.error(e)
+                        continue
 
                     try:
                         data["datetime"] = parse_date(data["timestamp"])
@@ -1221,19 +1208,17 @@ def load_blotter_args(blotter_name=None, logger=None):
             #     sys.exit(0)
             return {}
 
-    # no name provided - connect to last running
-    else:
-        blotter_files = sorted(
-            glob.glob(tempfile.gettempdir() + "/*.kinetick"), key=os.path.getmtime)
-
-        if not blotter_files:
-            # logger.critical(
-            #     "Cannot connect to running Blotter [%s]", blotter_name)
-            # if os.isatty(0):
-            #     sys.exit(0)
-            return {}
-
+    elif blotter_files := sorted(
+        glob.glob(tempfile.gettempdir() + "/*.kinetick"), key=os.path.getmtime
+    ):
         args_cache_file = blotter_files[-1]
+
+    else:
+        # logger.critical(
+        #     "Cannot connect to running Blotter [%s]", blotter_name)
+        # if os.isatty(0):
+        #     sys.exit(0)
+        return {}
 
     args = pickle.load(open(args_cache_file, "rb"))
     args['as_client'] = True

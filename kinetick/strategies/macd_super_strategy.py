@@ -104,8 +104,8 @@ class MacdSuperStrategy(Algo):
         if 'vwap' not in bars.columns:
             bars['vwap'] = bars.vwap()
 
-        if not period == self.__MIN_PERIOD__:
-            ticks = str(period) + 'T'
+        if period != self.__MIN_PERIOD__:
+            ticks = f'{str(period)}T'
             bars = bars.resample(ticks).agg({
                 'open': 'first',
                 'high': 'max',
@@ -116,7 +116,7 @@ class MacdSuperStrategy(Algo):
                 # the resulting bars would be empty
                 'volume': 'sum'}).dropna()
 
-        fast = False if not period == self.__FAST_PERIOD__ else True
+        fast = period == self.__FAST_PERIOD__
 
         ma, macd, super_trend, stoch = self.gen_indicators(bars, fast)
 
@@ -247,36 +247,31 @@ class MacdSuperStrategy(Algo):
 
             sl_hit = False
             if direction == 'LONG':
-                sl_hit = True if ltp <= position.stop else False
+                sl_hit = ltp <= position.stop
             elif direction == 'SHORT':
-                sl_hit = True if ltp >= position.stop else False
+                sl_hit = ltp >= position.stop
 
             if (ltp <= position.target and direction == "SHORT") or \
-                    (ltp >= position.target and direction == "LONG") or sl_hit:
+                        (ltp >= position.target and direction == "LONG") or sl_hit:
                 """target or stop-loss hit (exit conditions)"""
                 position.exit_price = ltp
                 position.exit_time = timestamp
 
                 if sl_hit:
                     position.exit_reason = 'SL Hit'
-                    self.exit_trade(instrument)
-
                 elif (fast_ta[-1]['signal'] == 'B' or (fast_ta[-1]['slow_k'] > fast_ta[-1]['slow_d'])) \
-                        and position.direction == "SHORT":
+                            and position.direction == "SHORT":
                     position.exit_reason = 'Target Hit'
-                    self.exit_trade(instrument)
-
                 elif (fast_ta[-1]['signal'] == 'S' or (fast_ta[-1]['slow_k'] < fast_ta[-1]['slow_d'])) \
-                        and position.direction == "LONG":
+                            and position.direction == "LONG":
                     position.exit_reason = 'Target Hit'
-                    self.exit_trade(instrument)
                 else:
                     # TODO trail stop-loss
                     position.exit_reason = 'Target Hit'
-                    self.exit_trade(instrument)
+                self.exit_trade(instrument)
 
         """ entry conditions """
-        if len(open_positions) == 0:
+        if not open_positions:
 
             entry_price = (fast_ta[-1]['ma'] + ltp) / 2
 
@@ -285,7 +280,7 @@ class MacdSuperStrategy(Algo):
                 bars = instrument.get_bars(lookback=__LOOKBACK__)
                 ma, macd, super_trend, stoch = self.gen_indicators(bars, fast=True)
                 if super_trend.iloc[-1]['STX'] == 'up':
-                    entry_price = entry_price if entry_price < ltp else ltp
+                    entry_price = min(entry_price, ltp)
                     entry_price = 5 * round(entry_price / 5, 2)
                     st = fast_ta[-1]['ST']
                     st_buffer = st * 0.001
@@ -300,7 +295,7 @@ class MacdSuperStrategy(Algo):
                 bars = instrument.get_bars(lookback=__LOOKBACK__)
                 ma, macd, super_trend, stoch = self.gen_indicators(bars, fast=True)
                 if super_trend.iloc[-1]['STX'] == 'down':
-                    entry_price = entry_price if entry_price > ltp else ltp
+                    entry_price = max(entry_price, ltp)
                     entry_price = 5 * round(entry_price / 5, 2)
                     st = fast_ta[-1]['ST']
                     st_buffer = st * 0.001

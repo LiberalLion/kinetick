@@ -45,10 +45,10 @@ def ATR(df, period, ohlc=['open', 'high', 'low', 'close']):
             True Range (TR)
             ATR (ATR_$period)
     """
-    atr = 'ATR_' + str(period)
+    atr = f'ATR_{str(period)}'
 
     # Compute true range only if it is not computed and stored earlier in the df
-    if not 'TR' in df.columns:
+    if 'TR' not in df.columns:
         df['h-l'] = df[ohlc[1]] - df[ohlc[2]]
         df['h-yc'] = abs(df[ohlc[1]] - df[ohlc[3]].shift())
         df['l-yc'] = abs(df[ohlc[2]] - df[ohlc[3]].shift())
@@ -81,7 +81,7 @@ def SuperTrend(df, period=7, multiplier=3, ohlc=['open', 'high', 'low', 'close']
     """
 
     ATR(df, period, ohlc=ohlc)
-    atr = 'ATR_' + str(period)
+    atr = f'ATR_{str(period)}'
     st = 'ST'  # + str(period) + '_' + str(multiplier)
     stx = 'STX'  # + str(period) + '_' + str(multiplier)
 

@@ -73,13 +73,14 @@ def validate_columns(df, kind="BAR", raise_errors=True):
     for el in colsmap:
         col = colsmap[el]
         if col not in df.columns:
-            if "opt_" in col and is_option:
+            if (
+                "opt_" in col
+                and is_option
+                or "opt_" not in col
+                and not is_option
+            ):
                 if raise_errors:
-                    raise ValueError('Column %s not found' % el)
-                return False
-            elif "opt_" not in col and not is_option:
-                if raise_errors:
-                    raise ValueError('Column %s not found' % el)
+                    raise ValueError(f'Column {el} not found')
                 return False
     return True
 

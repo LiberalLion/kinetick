@@ -88,7 +88,7 @@ class Instrument(str):
         # if lookback is not None:
         #     bars = bars[-lookback:]
 
-        if not bars.empty > 0:  # and bars['asset_class'].values[-1] not in ("OPT", "FOP")
+        if bars.empty <= 0:  # and bars['asset_class'].values[-1] not in ("OPT", "FOP")
             bars.drop(bars.columns[
                           bars.columns.str.startswith('opt_')].tolist(),
                       inplace=True, axis=1)
@@ -159,9 +159,7 @@ class Instrument(str):
             quote : dict
                 The quote for this instruments
         """
-        if self in self.parent.quotes.keys():
-            return self.parent.quotes[self]
-        return None
+        return self.parent.quotes[self] if self in self.parent.quotes.keys() else None
 
     # ---------------------------------------
     def get_orderbook(self):
@@ -244,7 +242,7 @@ class Instrument(str):
             self.order(txn_type, position.quantity, **kwargs)
         else:
             def callback(trade=position, txn=txn_type, opts=kwargs, **args):
-                if trade.variety == PositionType.MIS or trade.variety == PositionType.CNC:
+                if trade.variety in [PositionType.MIS, PositionType.CNC]:
                     # TODO if MIS verify if position is open with broker executed.
                     self.order(txn, trade.quantity, pos_type=trade.variety, **opts, **args)
                 else:
@@ -485,8 +483,7 @@ class Instrument(str):
             positions : dict (positions) / float/str (attribute)
                 positions data for the instrument
         """
-        pos = [self._position] if self._position is not None else []
-        return pos
+        return [self._position] if self._position is not None else []
 
     # ---------------------------------------
     def set_position(self, position):

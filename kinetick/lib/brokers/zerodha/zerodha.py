@@ -165,7 +165,7 @@ class Zerodha():
 
     def default_session_expiry_hook(self, response, **kwargs):
         logger.info("Running session expiry hook")
-        headers = kwargs['headers'] if 'headers' in kwargs else {}
+        headers = kwargs.get('headers', {})
         retryAttempts = headers["x-retry"] if "x-retry" in headers else 1
         if int(retryAttempts) <= self.maxretry:
             logger.info(f"Retrying request. Attempt: {retryAttempts}")
@@ -173,7 +173,7 @@ class Zerodha():
             headers["x-retry"] = str(int(retryAttempts) + 1)
             kwargs['headers'] = headers
             return self._request(**kwargs)
-        logger.error("Maximum session retry attempts {} exceeded".format(self.maxretry))
+        logger.error(f"Maximum session retry attempts {self.maxretry} exceeded")
         raise Exception(f"zerodha: maximum re-login attempts {self.maxretry} failed")
 
     def set_session_expiry_hook(self, method):
@@ -379,10 +379,11 @@ class Zerodha():
     def get_order_variety(self, sec_type, pos_type):
         if sec_type == SecurityType.OPTION:
             return Zerodha.VARIETY_REGULAR, Zerodha.PRODUCT_MIS
-        if sec_type == SecurityType.STOCK and pos_type == PositionType.CO:
-            return Zerodha.VARIETY_CO, Zerodha.PRODUCT_MIS
-        if sec_type == SecurityType.STOCK and pos_type == PositionType.MIS:
-            return Zerodha.VARIETY_REGULAR, Zerodha.PRODUCT_MIS
+        if sec_type == SecurityType.STOCK:
+            if pos_type == PositionType.CO:
+                return Zerodha.VARIETY_CO, Zerodha.PRODUCT_MIS
+            if pos_type == PositionType.MIS:
+                return Zerodha.VARIETY_REGULAR, Zerodha.PRODUCT_MIS
         return Zerodha.VARIETY_REGULAR, Zerodha.PRODUCT_CNC
 
 

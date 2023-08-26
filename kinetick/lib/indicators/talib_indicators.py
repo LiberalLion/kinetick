@@ -55,11 +55,10 @@ def _extract_series(data):
 
     if isinstance(data, Series):
         values = data.values
-    else:
-        if "last" in data.columns:
-            values = data['last'].values
-        elif "close" in data.columns:
-            values = data['close'].values
+    elif "last" in data.columns:
+        values = data['last'].values
+    elif "close" in data.columns:
+        values = data['close'].values
 
     if values is None:
         raise ValueError(

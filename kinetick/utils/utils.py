@@ -39,14 +39,14 @@ decimal.getcontext().prec = 5
 
 
 def rand_pass(size):
-    # Takes random choices from
-    # ascii_letters and digits
-    generate_pass = ''.join([random.choice(string.ascii_uppercase +
-                                           string.ascii_lowercase +
-                                           string.digits)
-                             for n in range(size)])
-
-    return generate_pass
+    return ''.join(
+        [
+            random.choice(
+                string.ascii_uppercase + string.ascii_lowercase + string.digits
+            )
+            for _ in range(size)
+        ]
+    )
 
 
 # ---------------------------------------------
@@ -140,9 +140,7 @@ def to_decimal(number, points=None):
         return number
 
     number = float(decimal.Decimal(number * 1.))  # can't Decimal an int
-    if is_number(points):
-        return round(number, points)
-    return number
+    return round(number, points) if is_number(points) else number
 
 
 # ---------------------------------------------
@@ -152,10 +150,7 @@ def week_started_date(as_datetime=False):
     start = today - timedelta((today.weekday() + 1) % 7)
     dt = start + relativedelta.relativedelta(weekday=relativedelta.SU(-1))
 
-    if as_datetime:
-        return dt
-
-    return dt.strftime("%Y-%m-%d")
+    return dt if as_datetime else dt.strftime("%Y-%m-%d")
 
 
 # ---------------------------------------------
@@ -211,19 +206,14 @@ def gen_symbol_group(sym):
     elif "_CASH" in sym:
         return "CASH"
 
-    if "_FOP" in sym or "_OPT" in sym:
-        return sym[:-12]
-
-    return sym
+    return sym[:-12] if "_FOP" in sym or "_OPT" in sym else sym
 
 
 # ---------------------------------------------
 
 def gen_asset_class(sym):
     sym_class = str(sym).split("_")
-    if len(sym_class) > 1:
-        return sym_class[-1].replace("CASH", "CSH")
-    return "STK"
+    return sym_class[-1].replace("CASH", "CSH") if len(sym_class) > 1 else "STK"
 
 
 # ---------------------------------------------
@@ -345,13 +335,13 @@ def ib_duration_str(start_date=None):
 
     # return str(second_diff)+ " S"
     if day_diff == 0 and second_diff > 1:
-        return str(second_diff) + " S"
+        return f"{str(second_diff)} S"
     if 31 > day_diff > 0:
-        return str(day_diff) + " D"
+        return f"{str(day_diff)} D"
     if 365 > day_diff > 31:
-        return str(ceil(day_diff / 30)) + " M"
+        return f"{str(ceil(day_diff / 30))} M"
 
-    return str(ceil(day_diff / 365)) + " Y"
+    return f"{str(ceil(day_diff / 365))} Y"
 
 
 # ---------------------------------------------
@@ -363,25 +353,24 @@ def wb_resolution(res="T"):
 
     if periods > 0:
         if "min" in res or 'm' in res:
-            return "m" + str(periods), periods
+            return f"m{periods}", periods
         elif "hour" in res or "H" in res:
             mins = periods * 60
-            return "m" + str(mins), mins
-    else:
-        if "m" in res:
-            return "m1", 1
-        elif "day" in res or "d" in res:
-            return "d1", 24 * 60
-        elif "week" in res or "W" in res:
-            # if periods > 1:
-            #     raise Exception('week %s not supported', periods)
-            return "w1", 7 * 24 * 60
-        elif "month" in res:
-            return "mth1", 31 * 24 * 60
-        elif "quarter" in res or "q" in res:
-            return "mth3", 3 * 31 * 60
-        elif "year" in res or "y" in res:
-            return "y1", 365 * 24 * 60
+            return f"m{str(mins)}", mins
+    elif "m" in res:
+        return "m1", 1
+    elif "day" in res or "d" in res:
+        return "d1", 24 * 60
+    elif "week" in res or "W" in res:
+        # if periods > 1:
+        #     raise Exception('week %s not supported', periods)
+        return "w1", 7 * 24 * 60
+    elif "month" in res:
+        return "mth1", 31 * 24 * 60
+    elif "quarter" in res or "q" in res:
+        return "mth3", 3 * 31 * 60
+    elif "year" in res or "y" in res:
+        return "y1", 365 * 24 * 60
     raise Exception("unknown resolution provided")
 
 
@@ -409,11 +398,6 @@ def wb_lookback_str(start_date=None, end_date=datetime.utcnow(), interval=None):
     # return str(second_diff)+ " S"
     if day_diff == 0 and min_diff > 1:
         return min_diff / interval
-    if 31 > day_diff > 0:
-        return (min_diff + day_diff * 24 * 60) / interval
-    if 365 > day_diff > 31:
-        return (min_diff + day_diff * 24 * 60) / interval
-
     return (min_diff + day_diff * 24 * 60) / interval
 
 
@@ -476,28 +460,19 @@ def backdate(res, date=None, as_datetime=False, fmt='%Y-%m-%d'):
         while new_date.weekday() > 4:  # Mon-Fri are 0-4
             new_date = backdate(res="1D", date=new_date, as_datetime=True)
 
-    if as_datetime:
-        return new_date
-
-    return new_date.strftime(fmt)
+    return new_date if as_datetime else new_date.strftime(fmt)
 
 
 # ---------------------------------------------
 
 def previous_weekday(day=None, as_datetime=False):
     """ get the most recent business day """
-    if day is None:
-        day = datetime.now()
-    else:
-        day = datetime.strptime(day, '%Y-%m-%d')
-
+    day = datetime.now() if day is None else datetime.strptime(day, '%Y-%m-%d')
     day -= timedelta(days=1)
     while day.weekday() > 4:  # Mon-Fri are 0-4
         day -= timedelta(days=1)
 
-    if as_datetime:
-        return day
-    return day.strftime("%Y-%m-%d")
+    return day if as_datetime else day.strftime("%Y-%m-%d")
 
 
 # ---------------------------------------------
@@ -563,9 +538,7 @@ def convert_timezone(date_str, tz_from, tz_to="UTC", fmt=None):
     if tz_from != tz_to:
         date = datetime_to_timezone(date, tz_to)
 
-    if isinstance(fmt, str):
-        return date.strftime(fmt)
-    return date
+    return date.strftime(fmt) if isinstance(fmt, str) else date
 
 
 # ---------------------------------------------
@@ -698,7 +671,7 @@ def resample(data, resolution="1T", tz=None, ffill=False, dropna=False,
             size_col = 'volume'
 
         # add group indicator evey N df
-        if by == 'size' or by == 'lastsize' or by == 'volume':
+        if by in ['size', 'lastsize', 'volume']:
             df['cumvol'] = df[size_col].cumsum()
             df['mark'] = round(
                 round(round(df['cumvol'] / .1) * .1, 2) / freq) * freq
@@ -821,7 +794,6 @@ def resample(data, resolution="1T", tz=None, ffill=False, dropna=False,
 
             data = pd.concat(combined, sort=True)
 
-    # continue...
     else:
         ticks_ohlc_dict = {
             'lastsize': 'sum',
@@ -860,7 +832,7 @@ def resample(data, resolution="1T", tz=None, ffill=False, dropna=False,
             if "last" in data.columns:
                 tick_dict = {}
                 for col in data[data['symbol'] == sym].columns:
-                    if col in ticks_ohlc_dict.keys():
+                    if col in ticks_ohlc_dict:
                         tick_dict[col] = ticks_ohlc_dict[col]
 
                 ohlc = data[data['symbol'] == sym]['last'].resample(
@@ -878,7 +850,7 @@ def resample(data, resolution="1T", tz=None, ffill=False, dropna=False,
             else:
                 bar_dict = {}
                 for col in data[data['symbol'] == sym].columns:
-                    if col in bars_ohlc_dict.keys():
+                    if col in bars_ohlc_dict:
                         bar_dict[col] = bars_ohlc_dict[col]
 
                 original_length = len(data[data['symbol'] == sym])
@@ -954,9 +926,9 @@ class DataStore():
         # append all data
         if len(args) == 1:
             if isinstance(args[0], dict):
-                data.update(dict(args[0]))
+                data |= dict(args[0])
             elif isinstance(args[0], pd.DataFrame):
-                data.update(args[0][-1:].to_dict(orient='records')[0])
+                data |= args[0][-1:].to_dict(orient='records')[0]
 
         # add kwargs
         if kwargs:
@@ -971,7 +943,7 @@ class DataStore():
         else:
             sym = data["symbol"]
             new_data["symbol"] = data["symbol"]
-            for key in data.keys():
+            for key in data:
                 if key not in ['datetime', 'symbol_group', 'asset_class']:
                     new_data[sym + '_' + str(key).upper()] = data[key]
 
@@ -1057,10 +1029,7 @@ def create_continuous_contract(df, resolution="1T"):
                           ], sort=True)
 
     def _continuous_contract_flags(daily_df):
-        # grab expirations
-        expirations = list(daily_df['expiry'].dropna().unique())
-        expirations.sort()
-
+        expirations = sorted(daily_df['expiry'].dropna().unique())
         # set continuous contract markets
         flags = None
         for expiration in expirations:
@@ -1087,9 +1056,11 @@ def create_continuous_contract(df, resolution="1T"):
         # single row df won't resample
         if len(flags.index) <= 1:
             flags = pd.DataFrame(
-                index=pd.date_range(start=flags[0:1].index[0],
-                                    periods=24, freq="1H"), data=flags[
-                    ['symbol', 'expiry', 'gap']]).ffill()
+                index=pd.date_range(
+                    start=flags[:1].index[0], periods=24, freq="1H"
+                ),
+                data=flags[['symbol', 'expiry', 'gap']],
+            ).ffill()
 
         flags['expiry'] = pd.to_datetime(flags['expiry'], utc=True)
         return flags[['symbol', 'expiry', 'gap']]
